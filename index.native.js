@@ -107,9 +107,9 @@ const TinderCard = React.forwardRef(
         } else if (dir === 'left') {
           await animateOut({ x: -power, y: disturbance }, setSpringTarget)
         } else if (dir === 'up') {
-          await animateOut({ x: disturbance, y: power }, setSpringTarget)
-        } else if (dir === 'down') {
           await animateOut({ x: disturbance, y: -power }, setSpringTarget)
+        } else if (dir === 'down') {
+          await animateOut({ x: disturbance, y: power }, setSpringTarget)
         }
         if (onCardLeftScreen) onCardLeftScreen(dir)
       },
@@ -154,10 +154,16 @@ const TinderCard = React.forwardRef(
       () =>
         PanResponder.create({
           // Ask to be the responder:
-          onStartShouldSetPanResponder: (evt, gestureState) => true,
-          onStartShouldSetPanResponderCapture: (evt, gestureState) => true,
-          onMoveShouldSetPanResponder: (evt, gestureState) => true,
-          onMoveShouldSetPanResponderCapture: (evt, gestureState) => true,
+          onStartShouldSetPanResponder: (evt, gestureState) => false,
+          onStartShouldSetPanResponderCapture: (evt, gestureState) => false,
+          onMoveShouldSetPanResponder: (evt, gestureState) => {
+            const { dx, dy } = gestureState
+            return (dx > 2 || dx < -2 || dy > 2 || dy < -2)
+          },
+          onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+            const { dx, dy } = gestureState
+            return (dx > 2 || dx < -2 || dy > 2 || dy < -2)
+          },
 
           onPanResponderGrant: (evt, gestureState) => {
             // The gesture has started.

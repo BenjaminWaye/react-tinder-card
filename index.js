@@ -1,8 +1,6 @@
 const React = require('react')
 const { useSpring, animated } = require('@react-spring/web')
-
-const height = window.innerHeight
-const width = window.innerWidth
+const useWindowSize = require('./useWindowSize')
 
 const settings = {
   maxTilt: 25, // in deg
@@ -35,8 +33,8 @@ const normalize = (vector) => {
   return { x: vector.x / length, y: vector.y / length }
 }
 
-const animateOut = async (gesture, setSpringTarget) => {
-  const diagonal = pythagoras(height, width)
+const animateOut = async (gesture, setSpringTarget, windowHeight, windowWidth) => {
+  const diagonal = pythagoras(windowHeight, windowWidth)
   const velocity = pythagoras(gesture.x, gesture.y)
   const finalX = diagonal * gesture.x
   const finalY = diagonal * gesture.y
@@ -88,6 +86,7 @@ const TinderCard = React.forwardRef(
     { flickOnSwipe = true, children, onSwipe, onCardLeftScreen, className, preventSwipe = [], swipeRequirementType = 'velocity', swipeThreshold = settings.swipeThreshold, onSwipeRequirementFulfilled, onSwipeRequirementUnfulfilled },
     ref
   ) => {
+    const { width, height } = useWindowSize()
     const [{ xyrot }, setSpringTarget] = useSpring(() => ({
       xyrot: [0, 0, 0],
       config: physics.touchResponsive
@@ -101,13 +100,13 @@ const TinderCard = React.forwardRef(
         const power = 1.3
         const disturbance = (Math.random() - 0.5) / 2
         if (dir === 'right') {
-          await animateOut({ x: power, y: disturbance }, setSpringTarget)
+          await animateOut({ x: power, y: disturbance }, setSpringTarget, width, height)
         } else if (dir === 'left') {
-          await animateOut({ x: -power, y: disturbance }, setSpringTarget)
+          await animateOut({ x: -power, y: disturbance }, setSpringTarget, width, height)
         } else if (dir === 'up') {
-          await animateOut({ x: disturbance, y: power }, setSpringTarget)
+          await animateOut({ x: disturbance, y: -power }, setSpringTarget, width, height)
         } else if (dir === 'down') {
-          await animateOut({ x: disturbance, y: -power }, setSpringTarget)
+          await animateOut({ x: disturbance, y: power }, setSpringTarget, width, height)
         }
         if (onCardLeftScreen) onCardLeftScreen(dir)
       },
@@ -134,7 +133,7 @@ const TinderCard = React.forwardRef(
                 y: gesture.vy
               }) : (
                 normalize({ x: gesture.dx, y: gesture.dy }) // Normalize to avoid flicking the card away with super fast speed only direction is wanted here
-              ), setSpringTarget, swipeRequirementType)
+              ), setSpringTarget, width, height)
               if (onCardLeftScreen) onCardLeftScreen(dir)
               return
             }
@@ -144,7 +143,7 @@ const TinderCard = React.forwardRef(
         // Card was not flicked away, animate back to start
         animateBack(setSpringTarget)
       },
-      [swipeRequirementType, flickOnSwipe, preventSwipe, onSwipe, onCardLeftScreen]
+      [swipeRequirementType, flickOnSwipe, preventSwipe, onSwipe, onCardLeftScreen, width, height]
     )
 
     let swipeThresholdFulfilledDirection = 'none'
@@ -171,22 +170,26 @@ const TinderCard = React.forwardRef(
       let lastPosition = { dx: 0, dy: 0, vx: 0, vy: 0, timeStamp: Date.now() }
       let isClicking = false
 
-      element.current.addEventListener(('touchstart'), (ev) => {
-        if (ev.target.getAttribute("class") && !ev.target.getAttribute("class").includes('pressable') && ev.cancelable) {
+      const onTouchStart = (ev) => {
+         if (ev.target.getAttribute("class") && !ev.target.getAttribute("class").includes('pressable') && ev.cancelable) {
           ev.preventDefault()
         }
 
         const gestureState = gestureStateFromWebEvent(ev, startPositon, lastPosition, true)
         lastPosition = gestureState
         startPositon = { x: ev.touches[0].clientX, y: ev.touches[0].clientY }
-      })
+      }
 
-      element.current.addEventListener(('mousedown'), (ev) => {
+      element.current.addEventListener(('touchstart'), onTouchStart)
+
+      const onMouseDown = (ev) => {
         isClicking = true
         const gestureState = gestureStateFromWebEvent(ev, startPositon, lastPosition, false)
         lastPosition = gestureState
         startPositon = { x: ev.clientX, y: ev.clientY }
-      })
+      }
+
+      element.current.addEventListener(('mousedown'), onMouseDown)
 
       const handleMove = (gestureState) => {
         // Check fulfillment
@@ -208,37 +211,55 @@ const TinderCard = React.forwardRef(
         // use guestureState.vx / guestureState.vy for velocity calculations
         // translate element
         let rot = gestureState.vx * 15 // Magic number 15 looks about right
+        if (isNaN(rot)) rot = 0
         rot = Math.max(Math.min(rot, settings.maxTilt), -settings.maxTilt)
         setSpringTarget.start({ xyrot: [gestureState.dx, gestureState.dy, rot], config: physics.touchResponsive })
       }
 
-      window.addEventListener(('mousemove'), (ev) => {
+      const onMouseMove = (ev) => {
         if (!isClicking) return
         const gestureState = gestureStateFromWebEvent(ev, startPositon, lastPosition, false)
         lastPosition = gestureState
         handleMove(gestureState)
-      })
+      }
 
-      window.addEventListener(('mouseup'), (ev) => {
+      window.addEventListener(('mousemove'), onMouseMove)
+
+      const onMouseUp = (ev) => {
         if (!isClicking) return
         isClicking = false
         handleSwipeReleased(setSpringTarget, lastPosition)
         startPositon = { x: 0, y: 0 }
         lastPosition = { dx: 0, dy: 0, vx: 0, vy: 0, timeStamp: Date.now() }
-      })
+      }
 
-      element.current.addEventListener(('touchmove'), (ev) => {
+      window.addEventListener(('mouseup'), onMouseUp)
+
+      const onTouchMove = (ev) => {
         const gestureState = gestureStateFromWebEvent(ev, startPositon, lastPosition, true)
         lastPosition = gestureState
         handleMove(gestureState)
-      })
+      }
 
-      element.current.addEventListener(('touchend'), (ev) => {
+      element.current.addEventListener(('touchmove'), onTouchMove)
+
+      const onTouchEnd = (ev) => {
         handleSwipeReleased(setSpringTarget, lastPosition)
         startPositon = { x: 0, y: 0 }
         lastPosition = { dx: 0, dy: 0, vx: 0, vy: 0, timeStamp: Date.now() }
-      })
-    })
+      }
+
+      element.current.addEventListener(('touchend'), onTouchEnd)
+
+      return () => {
+        element.current.removeEventListener(('touchstart'), onTouchStart)
+        element.current.removeEventListener(('touchmove'), onTouchMove)
+        element.current.removeEventListener(('touchend'), onTouchEnd)
+        window.removeEventListener(('mousemove'), onMouseMove)
+        window.removeEventListener(('mouseup'), onMouseUp)
+        element.current.removeEventListener(('mousedown'), onMouseDown)
+      }
+    }, [handleSwipeReleased, setSpringTarget, onSwipeRequirementFulfilled, onSwipeRequirementUnfulfilled])
 
     const element = React.useRef()
 
